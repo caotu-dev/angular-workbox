@@ -1,27 +1,28 @@
-# TodoList
+# Angular workbox
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 16.2.1.
+Integrate [Workbox](https://developer.chrome.com/docs/workbox/what-is-workbox) to Angular app - a service worker library integration for WPA (Progressive Web App) which caching assets, api response, ...etc in order to work in Offline mode.
 
-## Development server
+## Workbox
+`injectManifest` mode will generate a list of URLs to precache, and add that precache manifest to an existing service worker file. It will otherwise leave the file as-is.
+`workbox-routing` for request matching.
+`workbox-strategies` for caching strategies.
+`workbox-precaching` for precaching.
+`workbox-expiration` for managing caches.
+`workbox-window` for registering a service worker and handling updates in the window context.
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
-
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+## Serve
+ - Copy content of `.env.local` to `.env`
+ - Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+ - Local Environment: `npm run start:local`  on port 8100
+ - Dev Environment: `npm run start:dev` on port 8100
+ - Prod Environment: `npm run start:prod` on port 8100
 
 ## Build
-
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+ - Local Environment: `npm run build:local`
+ - Dev Environment: `npm run build:dev`
+ - Prod Environment: `npm run build:prod`
 
 ## Running unit tests
 
 Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+``
