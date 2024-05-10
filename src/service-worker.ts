@@ -8,9 +8,10 @@
 
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
 import { ExpirationPlugin } from "workbox-expiration";
-import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from "workbox-precaching";
-import { registerRoute, NavigationRoute } from "workbox-routing";
+import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL, PrecacheFallbackPlugin } from "workbox-precaching";
+import { registerRoute, NavigationRoute, Route } from "workbox-routing";
 import { NetworkOnly, StaleWhileRevalidate, CacheFirst } from "workbox-strategies";
+import { setCacheNameDetails } from 'workbox-core';
 
 declare const self: any;
 
@@ -32,6 +33,14 @@ if (DEBUG_MODE) {
   console.debug(`Service worker version ${SERVICE_WORKER_VERSION} loading...`);
 }
 
+setCacheNameDetails({
+  prefix: 'todo-app',
+  suffix: 'v1',
+  precache: 'install-time',
+  runtime: 'run-time',
+  googleAnalytics: 'ga',
+});
+
 // ------------------------------------------------------------------------------------------
 // Precaching configuration
 // ------------------------------------------------------------------------------------------
@@ -43,7 +52,7 @@ cleanupOutdatedCaches();
 // This is done by workbox-build-inject.js for the production build
 let assetsToCache = self.__WB_MANIFEST;
 // To customize the assets afterwards:
-//assetsToCache = [...assetsToCache, ???];
+// assetsToCache = [...assetsToCache];
 
 if (DEBUG_MODE) {
   console.trace(`${componentName}:: Assets that will be cached: `, assetsToCache);
@@ -52,7 +61,6 @@ if (DEBUG_MODE) {
 if(!DEBUG_MODE){
   precacheAndRoute(assetsToCache);
 }
-
 
 // ------------------------------------------------------------------------------------------
 // Routes
@@ -63,13 +71,28 @@ if(!DEBUG_MODE){
 // it's a SPA, so each path that is a navigation should default to index.html
 
 if(!DEBUG_MODE){
-  const defaultRouteHandler = createHandlerBoundToURL("/index.html");
+  const defaultRouteHandler = createHandlerBoundToURL("./index.html");
   const defaultNavigationRoute = new NavigationRoute(defaultRouteHandler, {
     //allowlist: [],
     //denylist: [],
   });
   registerRoute(defaultNavigationRoute);
 }
+
+// The network-only callback should match navigation requests, and
+// the handler for the route should use the network-only strategy, but
+// fall back to a precached offline page in case the user is offline.
+const networkOnlyNavigationRoute = new Route(({request}) => {
+  return request.mode === 'navigate';
+}, new NetworkOnly({
+  plugins: [
+    new PrecacheFallbackPlugin({
+      fallbackURL: '/offline.html'
+    })
+  ]
+}));
+
+registerRoute(networkOnlyNavigationRoute);
 
 
 // Cache the Google Fonts stylesheets with a stale while revalidate strategy.
@@ -126,7 +149,7 @@ registerRoute(/(https:\/\/)?([^\/\s]+\/)database\/.*/, new NetworkOnly());
 
 // Cache api request
 registerRoute(
-  /(https:\/\/)?([^\/\s]+\/)\/.*/,
+  /^(https:\/\/dummyjson.com\/)/,
   new StaleWhileRevalidate({
     cacheName: 'api-cache',
     plugins: [
