@@ -8,18 +8,18 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "-----DEV-----": "",
-    "start:dev": "npm run build:dev && http-server -p 8100 dist/todo-list",
-    "build:dev": "ng build todo-list",
+    "start:dev": "npm run build:dev && cp ./offline.html dist/todo-list/offline.html && http-server -p 8100 dist/todo-list",
+    "build:dev": "ng build todo-list && cp ./offline.html dist/todo-list/offline.html",
     "postbuild:dev": "npm run build:webpack:dev",
     "build:webpack:dev": "rimraf ./dist/todo-list/service-worker.js && webpack --config ./webpack.dev.config.js --progress && node ./workbox-build-inject.js",
     "-----PROD-----": "",
-    "start:prod": "npm run build:prod && http-server -p 8100 dist/todo-list",
-    "build:prod": "ng build todo-list --prod",
+    "start:prod": "npm run build:prod  && cp ./offline.html dist/todo-list/offline.html && http-server -p 8100 dist/todo-list",
+    "build:prod": "ng build todo-list --prod  && cp ./offline.html dist/todo-list/offline.html",
     "postbuild:prod": "npm run build:webpack:prod",
     "build:webpack:prod": "rimraf ./dist/todo-list/service-worker.js && webpack --config ./webpack.prod.config.js --progress && node ./workbox-build-inject.js",
     "-----LOCAL-----": "",
     "start:local": "npm run build:webpack:local && ng serve",
-    "build:webpack:local": "rimraf ./src/service-worker.js && webpack --config ./webpack.local.config.js"
+    "build:webpack:local": "rimraf ./src/service-worker.js && webpack --config ./webpack.local.config.js  && cp ./offline.html dist/todo-list/offline.html"
   },
   "private": true,
   "dependencies": {

@@ -10,8 +10,14 @@ import { CacheableResponsePlugin } from "workbox-cacheable-response";
 import { ExpirationPlugin } from "workbox-expiration";
 import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL, PrecacheFallbackPlugin } from "workbox-precaching";
 import { registerRoute, NavigationRoute, Route } from "workbox-routing";
-import { NetworkOnly, StaleWhileRevalidate, CacheFirst } from "workbox-strategies";
+import { NetworkOnly, StaleWhileRevalidate, CacheFirst, NetworkFirst } from "workbox-strategies";
 import { setCacheNameDetails } from 'workbox-core';
+// import { offlineFallback } from 'workbox-recipes';
+import { BackgroundSyncPlugin } from "workbox-background-sync/BackgroundSyncPlugin";
+// import { Queue } from "workbox-background-sync/Queue";
+import {clientsClaim} from 'workbox-core';
+
+clientsClaim();
 
 declare const self: any;
 
@@ -23,6 +29,13 @@ const DEBUG_MODE = location.hostname === "localhost";
 const DAY_IN_SECONDS = 24 * 60 * 60;
 const MONTH_IN_SECONDS = DAY_IN_SECONDS * 30;
 const YEAR_IN_SECONDS = DAY_IN_SECONDS * 365;
+const NETWORK_TIMEOUT_IN_SECONDS = 30;
+
+
+// Hardcode the fallback cache name and the offline
+// HTML fallback's URL for failed responses
+const FALLBACK_CACHE_NAME = 'offline-fallback';
+const FALLBACK_HTML = '/offline.html';
 
 /**
  * The current version of the service worker.
@@ -58,7 +71,7 @@ if (DEBUG_MODE) {
   console.trace(`${componentName}:: Assets that will be cached: `, assetsToCache);
 }
 
-if(!DEBUG_MODE){
+if (!DEBUG_MODE) {
   precacheAndRoute(assetsToCache);
 }
 
@@ -70,7 +83,7 @@ if(!DEBUG_MODE){
 // where the browser does not how to handle deep links
 // it's a SPA, so each path that is a navigation should default to index.html
 
-if(!DEBUG_MODE){
+if (!DEBUG_MODE) {
   const defaultRouteHandler = createHandlerBoundToURL("./index.html");
   const defaultNavigationRoute = new NavigationRoute(defaultRouteHandler, {
     //allowlist: [],
@@ -82,17 +95,52 @@ if(!DEBUG_MODE){
 // The network-only callback should match navigation requests, and
 // the handler for the route should use the network-only strategy, but
 // fall back to a precached offline page in case the user is offline.
-const networkOnlyNavigationRoute = new Route(({request}) => {
+const networkOnlyNavigationRoute = new Route(({ request }) => {
   return request.mode === 'navigate';
 }, new NetworkOnly({
   plugins: [
     new PrecacheFallbackPlugin({
-      fallbackURL: '/offline.html'
+      fallbackURL: FALLBACK_HTML
     })
   ]
 }));
 
 registerRoute(networkOnlyNavigationRoute);
+
+// Only wait for three seconds before returning the last
+// cached version of the requested page.
+const navigationRoute = new NavigationRoute(new NetworkFirst({
+  networkTimeoutSeconds: NETWORK_TIMEOUT_IN_SECONDS,
+  cacheName: 'navigations'
+}));
+
+registerRoute(navigationRoute);
+
+// Cache the fallback HTML during installation.
+self.addEventListener('install', (event: any) => {
+  event.waitUntil(
+    caches.open(FALLBACK_CACHE_NAME).then((cache) => cache.add(FALLBACK_HTML)),
+  );
+});
+
+// Apply a network-only strategy to navigation requests.
+// If offline, or if more than five seconds pass before there's a
+// network response, fall back to the cached offline HTML.
+const networkWithFallbackStrategy = new NetworkOnly({
+  networkTimeoutSeconds: NETWORK_TIMEOUT_IN_SECONDS,
+  plugins: [
+    {
+      handlerDidError: async () => {
+        return await caches.match(FALLBACK_HTML, {
+          cacheName: FALLBACK_CACHE_NAME,
+        });
+      },
+    },
+  ],
+});
+
+// Register the route to handle all navigations.
+registerRoute(new NavigationRoute(networkWithFallbackStrategy));
 
 
 // Cache the Google Fonts stylesheets with a stale while revalidate strategy.
@@ -141,11 +189,17 @@ registerRoute(
   }),
 );
 
-// Anything authentication related MUST be performed online
-registerRoute(/(https:\/\/)?([^\/\s]+\/)api\/v1\/auth\/.*/, new NetworkOnly());
+const FAILED_API_REQUEST_QUEUE = "FAILED_API_REQUEST_QUEUE";
+// Retry api when user is back online
+const bgSyncPlugin = new BackgroundSyncPlugin(FAILED_API_REQUEST_QUEUE, {
+  maxRetentionTime: 24 * 60 // Retry for max of 24 Hours (specified in minutes)
+});
 
-// Database access is only supported while online
-registerRoute(/(https:\/\/)?([^\/\s]+\/)database\/.*/, new NetworkOnly());
+// Anything authentication related MUST be performed online
+registerRoute(/(https:\/\/)?([^\/\s]+\/)api\/v1\/auth\/.*/, new NetworkOnly({
+  plugins: [bgSyncPlugin]
+}));
+
 
 // Cache api request
 registerRoute(
@@ -153,6 +207,8 @@ registerRoute(
   new StaleWhileRevalidate({
     cacheName: 'api-cache',
     plugins: [
+      // Only cache when response 200
+      new CacheableResponsePlugin({ statuses: [200] }),
       // Customize cache expiration
       new ExpirationPlugin({
         maxEntries: 50, // Maximum number of items to cache
@@ -195,8 +251,32 @@ self.addEventListener("message", (event: any) => {
     }
 
     if (event.data.type === 'PING') {
-        console.log('Received PING message from window:', event);
-        event.ports[0].postMessage({ type: 'PONG' });
+      console.log('Received PING message from window:', event);
+      event.ports[0].postMessage({ type: 'PONG' });
     }
   }
 });
+
+// Add to retry failed request queue when user is back online
+// this only apply when intenet connection is lost while fetching these request
+// Not apply for 400 or 500 error code request
+// const queue = new Queue(FAILED_API_REQUEST_QUEUE);
+// self.addEventListener('fetch', (event: any) => {
+//   // Add in your own criteria here to return early if this
+//   // isn't a request that should use background sync.
+//   if (event.request.method !== 'POST') {
+//     return;
+//   }
+
+//   const bgSyncLogic = async () => {
+//     try {
+//       const response = await fetch(event.request.clone());
+//       return response;
+//     } catch (error) {
+//       await queue.pushRequest({request: event.request});
+//       return error;
+//     }
+//   };
+
+//   event.respondWith(bgSyncLogic());
+// });
